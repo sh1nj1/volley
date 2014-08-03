@@ -27,7 +27,7 @@ apply plugin: 'signing'
 
 archivesBaseName = 'volley'
 group = 'com.google.android'
-version = '1.0-SNAPSHOT'
+version = '1.0.1-SNAPSHOT'
 
 def repoUrl = System.properties['repoUrl'] == null ? 'http://dev1' : System.properties['repoUrl']
 
@@ -58,6 +58,7 @@ android {
 }
 
 dependencies {
+    compile 'com.android.support:support-v4:19.1.+'
 }
 
 task apklib(type: Zip) {
