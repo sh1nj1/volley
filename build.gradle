@@ -1,18 +1,42 @@
+// Copyright (C) 2014 The Android Open Source Project
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//      http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
 buildscript {
     repositories {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:0.8.+'
+        classpath 'com.android.tools.build:gradle:0.12.+'
     }
 }
 
 apply plugin: 'android-library'
 
+apply plugin: 'maven'
+apply plugin: 'signing'
+
+archivesBaseName = 'volley'
+group = 'com.google.android'
+version = '1.0-SNAPSHOT'
+
+def repoUrl = System.properties['repoUrl'] == null ? 'http://dev1' : System.properties['repoUrl']
+
+ext.isReleaseVersion = !version.endsWith("SNAPSHOT")
+
 android {
     compileSdkVersion 19
-    buildToolsVersion = 19
-
+    buildToolsVersion = 19.1
+ 
     sourceSets {
         defaultConfig {
             testPackageName 'com.android.volley.tests'
@@ -26,10 +50,104 @@ android {
             renderscript.srcDirs = ['src']
             java.srcDirs         = ['src']
             manifest.srcFile 'AndroidManifest.xml'
-
         }
 
         instrumentTest.setRoot('tests')
         instrumentTest.java.srcDirs = ['tests/src']
     }
 }
+
+dependencies {
+}
+
+task apklib(type: Zip) {
+    dependsOn 'packageReleaseJar'
+    appendix = extension = 'apklib'
+
+    from 'AndroidManifest.xml'
+    into('res') {
+        from 'res'
+    }
+    into('src') {
+        from 'src'
+    }
+}
+
+configurations {
+    archives {
+        extendsFrom configurations.default
+    }
+}
+
+signing {
+    required { isReleaseVersion && gradle.taskGraph.hasTask("uploadArchives") }
+    sign configurations.archives
+}
+
+uploadArchives {
+    repositories {
+        mavenDeployer {
+            beforeDeployment { MavenDeployment deployment -> signing.signPom(deployment) }
+
+            repository(url: repoUrl+'/nexus/content/repositories/releases/') {
+                authentication(userName: sonatypeUsername, password: sonatypePassword)
+            }
+            snapshotRepository(url: repoUrl+'/nexus/content/repositories/snapshots/') {
+                authentication(userName: sonatypeUsername, password: sonatypePassword)
+            }
+
+            modifyPom(addFilter('aar') { artifact, file ->
+                artifact.name == archivesBaseName
+            })
+
+            // FIXME I can't upload apklib I don't know even if I declare "archives { apklib }".
+            modifyPom(addFilter('apklib') { artifact, file ->
+                artifact.name == archivesBaseName + '-apklib'
+            })
+
+            // There's no official apklib for Google Play services, so we
+            // can't really maintain that dependency for the apklib packaging.
+            pom('apklib').whenConfigured { pom ->
+                pom.dependencies = []
+            }
+        }
+    }
+}
+
+def modifyPom(pom) {
+    pom.project {
+        name 'VolleyPlus'
+        description 'VolleyPlus library Project improvements to Volley along with full image caching.It involves using RequestQueue, RequestTickle and Request.'
+        url 'https://github.com/sh1nj1/'+archivesBaseName
+
+        scm {
+            url 'scm:git@github.com/sh1nj1/'+archivesBaseName+'.git'
+            connection 'scm:git@github.com/sh1nj1/'+archivesBaseName+'.git'
+            developerConnection 'scm:git@github.com/sh1nj1/'+archivesBaseName+'.git'
+        }
+
+        licenses {
+            license {
+                name 'The Apache Software License, Version 2.0'
+                url 'http://www.apache.org/licenses/LICENSE-2.0.txt'
+                distribution 'repo'
+            }
+        }
+
+        /*
+        organization {
+            name 'Google Inc'
+            url 'http://developers.google.com/maps'
+        }
+
+        developers {
+            developer {
+                id 'livotov'
+                name 'Dmitri Livotov'
+                url 'https://github.com/livotov'
+            }
+        }
+        */
+    }
+}
+
